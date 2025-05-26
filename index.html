@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProofHarvest Demo - Milestone-Based Smart Escrow</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const ProofHarvestEnhanced = () => {
+          // Mock data for preview with enhanced balance tracking
+          const [account, setAccount] = useState(null);
+          const [connected, setConnected] = useState(false);
+          const [escrows, setEscrows] = useState([
+            {
+              id: "1",
+              buyer: "0x1234567890123456789012345678901234567890",
+              seller: "0x9876543210987654321098765432109876543210",
+              amount: "2500.00",
+              released: "1000.00", // Added released amount (40% of 2500)
+              remaining: "1500.00", // Added remaining amount
+              status: "InProgress",
+              currentMilestone: 1,
+              lastUpdated: "2025-05-09T14:30:00Z", // Added timestamp for last update
+              milestones: [
+                { percentage: 40, amount: "1000.00", description: "Harvest completion", completed: true, completedAt: "2025-05-09T14:30:00Z" },
+                { percentage: 30, amount: "750.00", description: "Quality inspection passed", completed: false },
+                { percentage: 30, amount: "750.00", description: "Delivery confirmation", completed: false }
+              ]
+            },
+            {
+              id: "2",
+              buyer: "0x1234567890123456789012345678901234567890",
+              seller: "0x5432109876543210987654321098765432109876",
+              amount: "1000.00",
+              released: "0.00", // No releases yet
+              remaining: "1000.00", // Full amount remaining
+              status: "Created",
+              currentMilestone: 0,
+              lastUpdated: "2025-05-10T09:15:00Z", // Added timestamp for creation
+              milestones: [
+                { percentage: 50, amount: "500.00", description: "Initial shipment", completed: false },
+                { percentage: 50, amount: "500.00", description: "Delivery confirmation", completed: false }
+              ]
+            }
+          ]);
+          
+          // Transaction state
+          const [transactionPending, setTransactionPending] = useState(false);
+          const [notification, setNotification] = useState(null);
+          const [showHistory, setShowHistory] = useState(false);
+          
+          // Filter by role
+          const [showFilter, setShowFilter] = useState("all");
+          const [filteredEscrows, setFilteredEscrows] = useState(escrows);
+          
+          // Transaction history for Escrow #1
+          const [transactionHistory, setTransactionHistory] = useState([
+            {
+              escrowId: "1",
+              action: "Milestone Completion",
+              milestone: 1,
+              amount: "1000.00",
+              timestamp: "2025-05-09T14:30:00Z"
+            },
+            {
+              escrowId: "1",
+              action: "Escrow Funded",
+              amount: "2500.00",
+              timestamp: "2025-05-05T10:15:00Z"
+            },
+            {
+              escrowId: "1",
+              action: "Escrow Created",
+              timestamp: "2025-05-03T16:22:00Z"
+            }
+          ]);
+          
+          useEffect(() => {
+            if (showFilter === "all") {
+              setFilteredEscrows(escrows);
+            } else if (showFilter === "buyer") {
+              setFilteredEscrows(escrows.filter(escrow => 
+                account && escrow.buyer.toLowerCase() === account.toLowerCase()
+              ));
+            } else if (showFilter === "seller") {
+              setFilteredEscrows(escrows.filter(escrow => 
+                account && escrow.seller.toLowerCase() === account.toLowerCase()
+              ));
+            }
+          }, [showFilter, escrows, account]);
+          
+          const connectWallet = () => {
+            setTransactionPending(true);
+            setTimeout(() => {
+              setAccount("0x1234567890123456789012345678901234567890");
+              setConnected(true);
+              setTransactionPending(false);
+              showNotification("Wallet connected successfully!");
+            }, 1500);
+          };
+          
+          const showNotification = (message, type = "success") => {
+            setNotification({ message, type });
+            setTimeout(() => setNotification(null), 5000);
+          };
+          
+          const formatAddress = (address) => {
+            if (!address) return '';
+            return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+          };
+          
+          const formatDate = (timestamp) => {
+            const date = new Date(timestamp);
+            return date.toLocaleString();
+          };
+
+          // Handle completing a milestone with updated balance tracking (sequential)
+          const handleCompleteMilestone = (escrowId) => {
+            setTransactionPending(true);
+            
+            // Simulate blockchain transaction
+            setTimeout(() => {
+              const updatedEscrows = [...escrows];
+              const index = updatedEscrows.findIndex(e => e.id === escrowId);
+              
+              if (index !== -1) {
+                const escrow = updatedEscrows[index];
+                const currentMilestoneIndex = escrow.currentMilestone;
+                
+                if (currentMilestoneIndex < escrow.milestones.length) {
+                  // Get the milestone being completed
+                  const milestone = escrow.milestones[currentMilestoneIndex];
+                  
+                  // Update milestone as completed
+                  milestone.completed = true;
+                  milestone.completedAt = new Date().toISOString();
+                  
+                  // Update released and remaining amounts
+                  const releasedAmount = parseFloat(escrow.released) + parseFloat(milestone.amount);
+                  escrow.released = releasedAmount.toFixed(2);
+                  escrow.remaining = (parseFloat(escrow.amount) - releasedAmount).toFixed(2);
+                  
+                  // Update current milestone index
+                  escrow.currentMilestone += 1;
+                  escrow.lastUpdated = new Date().toISOString();
+                  
+                  // Update status
+                  escrow.status = "InProgress";
+                  
+                  // If all milestones are completed
+                  if (escrow.currentMilestone >= escrow.milestones.length) {
+                    escrow.status = "Completed";
+                  }
+                  
+                  // Add to transaction history
+                  const newTransaction = {
+                    escrowId: escrowId,
+                    action: "Milestone Completion",
+                    milestone: currentMilestoneIndex + 1,
+                    amount: milestone.amount,
+                    timestamp: new Date().toISOString()
+                  };
+                  
+                  setTransactionHistory([newTransaction, ...transactionHistory]);
+                }
+              }
+              
+              setEscrows(updatedEscrows);
+              setTransactionPending(false);
+              showNotification(`Milestone completed for Escrow #${escrowId}! Funds released.`);
+            }, 2000);
+          };
+
+          // Handle completing a specific milestone by index (dynamic selection)
+          const handleCompleteMilestoneByIndex = (escrowId, milestoneIndex) => {
+            setTransactionPending(true);
+            
+            setTimeout(() => {
+              const updatedEscrows = [...escrows];
+              const index = updatedEscrows.findIndex(e => e.id === escrowId);
+              
+              if (index !== -1) {
+                const escrow = updatedEscrows[index];
+                
+                if (milestoneIndex < escrow.milestones.length && !escrow.milestones[milestoneIndex].completed) {
+                  // Get the milestone being completed
+                  const milestone = escrow.milestones[milestoneIndex];
+                  
+                  // Update milestone as completed
+                  milestone.completed = true;
+                  milestone.completedAt = new Date().toISOString();
+                  
+                  // Update released and remaining amounts
+                  const releasedAmount = parseFloat(escrow.released) + parseFloat(milestone.amount);
+                  escrow.released = releasedAmount.toFixed(2);
+                  escrow.remaining = (parseFloat(escrow.amount) - releasedAmount).toFixed(2);
+                  
+                  // Find next uncompleted milestone for currentMilestone tracking
+                  let nextMilestone = 0;
+                  while (nextMilestone < escrow.milestones.length && escrow.milestones[nextMilestone].completed) {
+                    nextMilestone++;
+                  }
+                  escrow.currentMilestone = nextMilestone;
+                  
+                  escrow.lastUpdated = new Date().toISOString();
+                  
+                  // Update status
+                  if (escrow.milestones.every(m => m.completed)) {
+                    escrow.status = "Completed";
+                  } else if (escrow.status === "Funded") {
+                    escrow.status = "InProgress";
+                  }
+                  
+                  // Add to transaction history
+                  const newTransaction = {
+                    escrowId: escrowId,
+                    action: "Milestone Completion",
+                    milestone: milestoneIndex + 1,
+                    amount: milestone.amount,
+                    timestamp: new Date().toISOString()
+                  };
+                  
+                  setTransactionHistory([newTransaction, ...transactionHistory]);
+                }
+              }
+              
+              setEscrows(updatedEscrows);
+              setTransactionPending(false);
+              showNotification(`Milestone ${milestoneIndex + 1} completed for Escrow #${escrowId}! ${escrow.milestones[milestoneIndex].amount} USDC released.`);
+            }, 2000);
+          };
+          
+          // Handle funding an escrow
+          const handleFundEscrow = (escrowId) => {
+            setTransactionPending(true);
+            
+            setTimeout(() => {
+              const updatedEscrows = [...escrows];
+              const index = updatedEscrows.findIndex(e => e.id === escrowId);
+              
+              if (index !== -1) {
+                updatedEscrows[index].status = "Funded";
+                updatedEscrows[index].lastUpdated = new Date().toISOString();
+                
+                // Add to transaction history
+                const newTransaction = {
+                  escrowId: escrowId,
+                  action: "Escrow Funded",
+                  amount: updatedEscrows[index].amount,
+                  timestamp: new Date().toISOString()
+                };
+                
+                setTransactionHistory([newTransaction, ...transactionHistory]);
+              }
+              
+              setEscrows(updatedEscrows);
+              setTransactionPending(false);
+              showNotification(`Escrow #${escrowId} funded successfully!`);
+            }, 2000);
+          };
+
+          // Render dynamic milestone selection buttons
+          const renderMilestoneButtons = (escrow) => {
+            const availableMilestones = escrow.milestones.filter((milestone, index) => !milestone.completed);
+            
+            if (availableMilestones.length === 0) return null;
+            
+            return React.createElement('div', {className: "mt-3 border-t border-gray-100 pt-3"},
+              React.createElement('div', {className: "text-xs font-medium text-gray-600 mb-2"}, "Select milestone to complete:"),
+              React.createElement('div', {className: "flex flex-wrap gap-1"},
+                escrow.milestones.map((milestone, index) => {
+                  if (milestone.completed) return null;
+                  
+                  return React.createElement('button', {
+                    key: index,
+                    onClick: () => handleCompleteMilestoneByIndex(escrow.id, index),
+                    disabled: transactionPending,
+                    className: "text-xs bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded disabled:bg-gray-400 disabled:cursor-not-allowed",
+                    title: `Complete: ${milestone.description}`
+                  }, `#${index + 1}: ${milestone.percentage}% (${milestone.amount} USDC)`);
+                })
+              )
+            );
+          };
+
+          return React.createElement('div', {className: "bg-gray-100 min-h-screen"},
+            React.createElement('div', {className: "max-w-6xl mx-auto px-4 py-8"},
+              // Prototype Notice
+              React.createElement('div', {className: "bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-lg mb-6"},
+                React.createElement('div', {className: "flex items-center"},
+                  React.createElement('svg', {className: "h-5 w-5 mr-2", fill: "currentColor", viewBox: "0 0 20 20"},
+                    React.createElement('path', {fillRule: "evenodd", d: "M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z", clipRule: "evenodd"})
+                  ),
+                  React.createElement('div', {},
+                    React.createElement('p', {className: "font-medium"}, "Prototype / Simulation – Not connected to blockchain"),
+                    React.createElement('p', {className: "text-sm"}, "This is a functional demo using simulated transactions for demonstration purposes.")
+                  )
+                )
+              ),
+
+              // Header
+              React.createElement('header', {className: "bg-green-700 text-white p-6 rounded-lg mb-8 text-center"},
+                React.createElement('div', {className: "text-2xl font-bold mb-2"}, "🌱 ProofHarvest"),
+                React.createElement('h1', {className: "text-xl mb-4"}, "Milestone-Based Smart Escrow for Ethical Agriculture"),
+                
+                // Wallet Connection
+                React.createElement('div', {className: "flex justify-center"},
+                  !connected ? 
+                    React.createElement('button', {
+                      onClick: connectWallet,
+                      className: "bg-white text-green-700 px-4 py-2 rounded font-medium hover:bg-gray-100",
+                      disabled: transactionPending
+                    }, transactionPending ? 'Connecting...' : 'Connect Wallet') :
+                    React.createElement('div', {className: "flex items-center bg-green-800 px-4 py-2 rounded"},
+                      React.createElement('div', {className: "mr-2"}, "Connected:"),
+                      React.createElement('div', {className: "bg-green-600 px-2 py-1 rounded font-mono text-sm"},
+                        formatAddress(account)
+                      )
+                    )
+                )
+              ),
+
+              // Main Content
+              React.createElement('main', {className: "bg-white rounded-lg shadow p-6 mb-8"},
+                !connected ? 
+                  React.createElement('div', {className: "text-center py-12 text-gray-500"},
+                    React.createElement('p', {className: "text-lg"}, "Connect your wallet to use the ProofHarvest DApp")
+                  ) :
+                  React.createElement('section', {},
+                    React.createElement('h2', {className: "text-xl font-bold text-green-700 mb-4 pb-2 border-b border-gray-200"}, "Your Escrow Agreements"),
+                    
+                    React.createElement('div', {className: "grid grid-cols-1 md:grid-cols-2 gap-6"},
+                      filteredEscrows.map(escrow =>
+                        React.createElement('div', {key: escrow.id, className: "border border-gray-200 rounded-lg shadow-sm p-4"},
+                          React.createElement('div', {className: "flex justify-between items-start mb-2"},
+                            React.createElement('div', {className: "text-gray-500 text-sm font-mono"}, `ID: ${escrow.id}`),
+                            React.createElement('div', {className: `text-xs font-medium px-2 py-1 rounded-full ${
+                              escrow.status === 'Created' ? 'bg-gray-100 text-gray-700' :
+                              escrow.status === 'Funded' ? 'bg-blue-100 text-blue-700' :
+                              escrow.status === 'InProgress' ? 'bg-yellow-100 text-yellow-700' :
+                              escrow.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                              'bg-red-100 text-red-700'
+                            }`}, escrow.status)
+                          ),
+                          
+                          // Enhanced Balance Display
+                          React.createElement('div', {className: "mb-4"},
+                            React.createElement('div', {className: "text-2xl font-bold"}, `${escrow.amount} USDC`),
+                            React.createElement('div', {className: "flex flex-wrap items-center text-sm mt-1"},
+                              React.createElement('div', {className: `mr-3 font-medium ${parseFloat(escrow.released) > 0 ? 'text-green-600' : 'text-gray-500'}`},
+                                `Released: ${escrow.released} USDC`,
+                                parseFloat(escrow.released) > 0 && 
+                                  React.createElement('span', {className: "ml-1"}, 
+                                    `(${((parseFloat(escrow.released) / parseFloat(escrow.amount)) * 100).toFixed(0)}%)`
+                                  )
+                              ),
+                              React.createElement('div', {className: `font-medium ${parseFloat(escrow.remaining) > 0 ? 'text-blue-600' : 'text-gray-500'}`},
+                                `In Escrow: ${escrow.remaining} USDC`,
+                                parseFloat(escrow.remaining) > 0 && 
+                                  React.createElement('span', {className: "ml-1"}, 
+                                    `(${((parseFloat(escrow.remaining) / parseFloat(escrow.amount)) * 100).toFixed(0)}%)`
+                                  )
+                              )
+                            ),
+                            React.createElement('div', {className: "text-xs text-gray-500 mt-1"}, 
+                              `Last updated: ${formatDate(escrow.lastUpdated)}`
+                            )
+                          ),
+                          
+                          React.createElement('div', {className: "text-sm mb-4"},
+                            React.createElement('div', {className: "mb-1"},
+                              React.createElement('span', {className: "text-gray-500 font-medium"}, "Buyer: "),
+                              React.createElement('span', {className: "bg-gray-100 px-1 py-0.5 rounded font-mono text-xs"}, formatAddress(escrow.buyer)),
+                              React.createElement('span', {className: "text-gray-500 ml-1"}, "(You)")
+                            ),
+                            React.createElement('div', {},
+                              React.createElement('span', {className: "text-gray-500 font-medium"}, "Seller: "),
+                              React.createElement('span', {className: "bg-gray-100 px-1 py-0.5 rounded font-mono text-xs"}, formatAddress(escrow.seller))
+                            )
+                          ),
+                          
+                          React.createElement('div', {className: "mb-4"},
+                            React.createElement('div', {className: "font-medium text-sm mb-1"},
+                              `Progress: ${escrow.milestones.slice(0, escrow.currentMilestone).reduce((sum, m) => sum + m.percentage, 0)}%`,
+                              React.createElement('span', {className: "text-gray-500 ml-1"}, 
+                                `(${escrow.currentMilestone} of ${escrow.milestones.length} milestones)`
+                              )
+                            ),
+                            React.createElement('div', {className: "bg-gray-200 h-2 rounded-full overflow-hidden"},
+                              React.createElement('div', {
+                                className: "bg-green-600 h-full",
+                                style: { 
+                                  width: `${escrow.milestones.slice(0, escrow.currentMilestone).reduce((sum, m) => sum + m.percentage, 0)}%` 
+                                }
+                              })
+                            )
+                          ),
+                          
+                          // Enhanced Milestone Display with Amounts
+                          React.createElement('div', {className: "mb-4"},
+                            React.createElement('div', {className: "font-medium text-sm mb-2"}, "Milestones:"),
+                            escrow.milestones.map((milestone, index) =>
+                              React.createElement('div', {
+                                key: index,
+                                className: `border-l-4 pl-3 py-2 mb-2 ${
+                                  index < escrow.currentMilestone 
+                                    ? 'border-green-500 bg-green-50' 
+                                    : index === escrow.currentMilestone
+                                    ? 'border-blue-500 bg-blue-50'
+                                    : 'border-gray-300 bg-gray-50'
+                                }`
+                              },
+                                React.createElement('div', {className: "flex justify-between text-sm mb-1"},
+                                  React.createElement('div', {},
+                                    `${index < escrow.currentMilestone ? '✓ ' : 
+                                     index === escrow.currentMilestone ? '→ ' : ''}Milestone ${index + 1}`
+                                  ),
+                                  React.createElement('div', {className: "font-medium flex"},
+                                    React.createElement('span', {className: "mr-1"}, `${milestone.percentage}%`),
+                                    React.createElement('span', {className: "text-gray-600"}, `(${milestone.amount} USDC)`)
+                                  )
+                                ),
+                                React.createElement('div', {className: "text-sm text-gray-600"}, milestone.description),
+                                milestone.completed && 
+                                  React.createElement('div', {className: "text-xs text-green-600 mt-1"}, 
+                                    `Completed on ${formatDate(milestone.completedAt)}`
+                                  )
+                              )
+                            )
+                          ),
+                          
+                          // Action Buttons
+                          React.createElement('div', {className: "mt-4"},
+                            escrow.status === 'Created' && 
+                              React.createElement('button', {
+                                className: "bg-green-700 text-white px-4 py-2 rounded font-medium hover:bg-green-800 disabled:bg-gray-400 w-full",
+                                disabled: transactionPending,
+                                onClick: () => handleFundEscrow(escrow.id)
+                              }, transactionPending ? 'Processing...' : 'Fund Escrow'),
+                            
+                            (escrow.status === 'Funded' || escrow.status === 'InProgress') && 
+                             escrow.milestones.some(m => !m.completed) && [
+                              escrow.currentMilestone < escrow.milestones.length && 
+                                React.createElement('button', {
+                                  key: "next-milestone",
+                                  className: "bg-blue-600 text-white px-4 py-2 rounded font-medium hover:bg-blue-700 disabled:bg-gray-400 w-full mb-2",
+                                  disabled: transactionPending,
+                                  onClick: () => handleCompleteMilestone(escrow.id)
+                                }, transactionPending ? 'Processing...' : `Complete Next: ${escrow.milestones[escrow.currentMilestone]?.description}`),
+                              
+                              renderMilestoneButtons(escrow)
+                            ]
+                          )
+                        )
+                      )
+                    ),
+                    
+                    // Filter controls
+                    React.createElement('div', {className: "mt-6 flex justify-center space-x-4"},
+                      React.createElement('button', {
+                        className: `px-3 py-1 rounded text-sm font-medium ${showFilter === 'all' ? 'bg-green-700 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`,
+                        onClick: () => setShowFilter('all')
+                      }, "All Escrows"),
+                      React.createElement('button', {
+                        className: `px-3 py-1 rounded text-sm font-medium ${showFilter === 'buyer' ? 'bg-green-700 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`,
+                        onClick: () => setShowFilter('buyer')
+                      }, "As Buyer"),
+                      React.createElement('button', {
+                        className: `px-3 py-1 rounded text-sm font-medium ${showFilter === 'seller' ? 'bg-green-700 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`,
+                        onClick: () => setShowFilter('seller')
+                      }, "As Seller")
+                    )
+                  )
+              ),
+              
+              // Transaction notification
+              notification && 
+                React.createElement('div', {className: `fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg ${
+                  notification.type === 'error' ? 'bg-red-100 text-red-700 border-l-4 border-red-500' : 
+                  'bg-green-100 text-green-700 border-l-4 border-green-500'
+                }`}, notification.message),
+              
+              // Loading overlay
+              transactionPending && 
+                React.createElement('div', {className: "fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50"},
+                  React.createElement('div', {className: "bg-white p-6 rounded-lg shadow-xl flex flex-col items-center"},
+                    React.createElement('div', {className: "animate-spin rounded-full h-12 w-12 border-b-2 border-green-700 mb-4"}),
+                    React.createElement('p', {className: "text-gray-700"}, "Processing transaction..."),
+                    React.createElement('p', {className: "text-xs text-gray-500 mt-2"}, "(Simulated for demo purposes)")
+                  )
+                ),
+              
+              // Footer
+              React.createElement('footer', {className: "text-center text-gray-500 text-sm mt-8"},
+                React.createElement('p', {}, "© 2025 GTL Labs - ProofHarvest"),
+                React.createElement('p', {className: "text-xs mt-1"}, "Demo Version - Enhanced Balance Display")
+              )
+            )
+          );
+        };
+
+        ReactDOM.render(React.createElement(ProofHarvestEnhanced), document.getElementById('root'));
+    </script>
+</body>
+</html>
